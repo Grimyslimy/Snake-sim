@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+        }
+        #topButton, #startButton {
+            padding: 10px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px;
+        }
+        #topButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+        #scoreBoard {
+            margin: 10px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <button id="topButton">Buy Colors</button>
+    <button id="startButton">Start Game</button>
+    <div id="scoreBoard">
+        Apples Eaten: <span id="score">0</span> | High Score: <span id="highScore">0</span> | Coins: <span id="coins">0</span>
+    </div>
+    <canvas id="snakeGame" width="400" height="400" style="display: none;"></canvas>
+
+    <script>
+        const canvas = document.getElementById('snakeGame');
+        const ctx = canvas.getContext('2d');
+        const box = 20;
+        let snake = [{ x: 9 * box, y: 9 * box }];
+        let direction = 'RIGHT';
+        let food = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+        let coin = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+        let greenApple = null; // Green apple for speed boost
+        let greenAppleTimer;
+        let score = 0;
+        let coins = parseInt(localStorage.getItem('coins')) || 0;
+        let highScore = parseInt(localStorage.getItem('highScore')) || 0;
+        let snakeColor = localStorage.getItem('snakeColor') || 'green';
+        let snakeTailColor = getLighterColor(snakeColor);
+        let speed = 200;
+        let game;
+        let speedBoostActive = false;
+
+        document.getElementById('highScore').innerText = highScore;
+        document.getElementById('coins').innerText = coins;
+
+        function getLighterColor(color) {
+            const colors = { red: "#ff9999", orange: "#ffcc99", yellow: "#ffffb3", green: "#99ff99", blue: "#99ccff", indigo: "#b3b3ff", violet: "#e6b3ff" };
+            return colors[color] || color;
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowUp' && direction !== 'DOWN') direction = 'UP';
+            if (event.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
+            if (event.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
+            if (event.key === 'ArrowRight' && direction !== 'LEFT') direction = 'RIGHT';
+        });
+
+        document.getElementById('topButton').addEventListener('click', openShop);
+        document.getElementById('startButton').addEventListener('click', startGame);
+
+        function openShop() {
+            const shopWindow = window.open('', '_blank', 'width=400,height=500');
+            shopWindow.document.write(`
+                <html>
+                <head><title>Color Shop</title><style>body{text-align:center;font-family:sans-serif}</style></head>
+                <body>
+                    <h2>Choose a Color to Buy</h2>
+                    <div>Red (100 coins) <button onclick="window.opener.purchaseColor('red', 100)">Buy</button></div>
+                    <div>Orange (200 coins) <button onclick="window.opener.purchaseColor('orange', 200)">Buy</button></div>
+                    <div>Yellow (300 coins) <button onclick="window.opener.purchaseColor('yellow', 300)">Buy</button></div>
+                    <div>Green (400 coins) <button onclick="window.opener.purchaseColor('green', 400)">Buy</button></div>
+                    <div>Blue (500 coins) <button onclick="window.opener.purchaseColor('blue', 500)">Buy</button></div>
+                    <div>Indigo (600 coins) <button onclick="window.opener.purchaseColor('indigo', 600)">Buy</button></div>
+                    <div>Violet (700 coins) <button onclick="window.opener.purchaseColor('violet', 700)">Buy</button></div>
+                </body>
+                </html>
+            `);
+        }
+
+        function purchaseColor(color, price) {
+            if (coins >= price) {
+                coins -= price;
+                localStorage.setItem('coins', coins);
+                document.getElementById('coins').innerText = coins;
+                snakeColor = color;
+                snakeTailColor = getLighterColor(color);
+                localStorage.setItem('snakeColor', color);
+                alert('Purchased ' + color + ' color!');
+            } else {
+                alert('Not enough coins!');
+            }
+        }
+
+        function startGame() {
+            document.getElementById('startButton').style.display = 'none';
+            canvas.style.display = 'block';
+            score = 0;
+            snake = [{ x: 9 * box, y: 9 * box }];
+            direction = 'RIGHT';
+            speed = 200;
+            clearInterval(game);
+            game = setInterval(draw, speed);
+            spawnGreenApple();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < snake.length; i++) {
+                ctx.fillStyle = i === 0 ? snakeColor : snakeTailColor;
+                ctx.fillRect(snake[i].x, snake[i].y, box, box);
+                ctx.strokeStyle = 'darkgreen';
+                ctx.strokeRect(snake[i].x, snake[i].y, box, box);
+            }
+
+            ctx.fillStyle = 'red';
+            ctx.fillRect(food.x, food.y, box, box);
+
+            ctx.fillStyle = 'gold';
+            ctx.fillRect(coin.x, coin.y, box, box);
+
+            if (greenApple) {
+                ctx.fillStyle = 'green';
+                ctx.fillRect(greenApple.x, greenApple.y, box, box);
+            }
+
+            let snakeX = snake[0].x;
+            let snakeY = snake[0].y;
+
+            if (direction === 'LEFT') snakeX -= box;
+            if (direction === 'UP') snakeY -= box;
+            if (direction === 'RIGHT') snakeX += box;
+            if (direction === 'DOWN') snakeY += box;
+
+            if (snakeX === food.x && snakeY === food.y) {
+                score++;
+                food = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+                if (score % 5 === 0) increaseSpeed();
+            } else {
+                snake.pop();
+            }
+
+            if (snakeX === coin.x && snakeY === coin.y) {
+                coins++;
+                localStorage.setItem('coins', coins);
+                document.getElementById('coins').innerText = coins;
+                coin = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+            }
+
+            if (greenApple && snakeX === greenApple.x && snakeY === greenApple.y) {
+                activateSpeedBoost();
+                greenApple = null;
+                clearTimeout(greenAppleTimer);
+            }
+
+            const newHead = { x: snakeX, y: snakeY };
+
+            if (snakeX < 0 || snakeY < 0 || snakeX >= canvas.width || snakeY >= canvas.height || collision(newHead, snake)) {
+                clearInterval(game);
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('highScore', highScore);
+                }
+                document.getElementById('highScore').innerText = highScore;
+                
+            }
+
+            snake.unshift(newHead);
+            document.getElementById('score').innerText = score;
+        }
+
+        function spawnGreenApple() {
+            greenAppleTimer = setTimeout(() => {
+                greenApple = { x: Math.floor(Math.random() * 20) * box, y: Math.floor(Math.random() * 20) * box };
+                setTimeout(() => { greenApple = null; }, 10000);
+                spawnGreenApple();
+            }, Math.random() * 10000 + 5000);
+        }
+
+        function increaseSpeed() {
+            clearInterval(game);
+            speed -= 5;
+            game = setInterval(draw, speed);
+        }
+
+        function activateSpeedBoost() {
+            clearInterval(game);
+            game = setInterval(draw, speed - 50);
+            setTimeout(() => {
+                clearInterval(game);
+                game = setInterval(draw, speed);
+            }, 5000);
+        }
+
+        function collision(head, array) {
+            return array.some(part => part.x === head.x && part.y === head.y);
+        }
+    </script>
+</body>
+</html>
